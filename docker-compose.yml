@@ -1,0 +1,313 @@
+services:
+  traefik:
+    image: traefik
+    container_name: traefik
+    env_file:
+      - .env
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - ./traefik/access-logs:/opt/access-logs
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.$DOMAIN`)"
+      - "traefik.http.routers.traefik.entrypoints=web"
+      - "traefik.http.services.traefik.loadbalancer.server.port=8080"
+    networks:
+      proxy2traefik:
+      traefik2host:
+        ipv4_address: ${TRAEFIK_MACVLAN_IP:?please specify this ip address in the .env file}
+
+
+  whoami1:
+    image: traefik/whoami
+    container_name: whoami1
+    env_file:
+      - .env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whoami1.rule=Host(`whoami1.$DOMAIN`)"
+      - "traefik.http.routers.whoami1.entrypoints=web"
+
+      # Define the Authentik middleware directly in the labels
+      - "traefik.http.middlewares.middlewares-authentik.forwardauth.address=http://authentik_server:9000/outpost.goauthentik.io/auth/traefik"
+      - "traefik.http.middlewares.middlewares-authentik.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.middlewares-authentik.forwardauth.authResponseHeaders=X-authentik-username,X-authentik-groups,X-authentik-email,X-authentik-name,X-authentik-uid,X-authentik-jwt,X-authentik-meta-jwks,X-authentik-meta-outpost,X-authentik-meta-provider,X-authentik-meta-app,X-authentik-meta-version"
+      ## Middlewares
+      # Replace the @file reference with a direct reference to the middleware defined in labels
+      - "traefik.http.routers.whoami1.middlewares=middlewares-authentik@docker"
+
+    networks:
+      - proxy2traefik
+
+
+
+  whoami2:
+    image: traefik/whoami
+    container_name: whoami2
+    env_file:
+      - .env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whoami2.rule=Host(`whoami2.$DOMAIN`)"
+      - "traefik.http.routers.whoami2.entrypoints=web"
+    networks:
+      - proxy2traefik
+
+  nginxcatchum:
+    image: nginx
+    container_name: nginxcatchum
+    env_file:
+     - .env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.nginxcatchum.rule=PathPrefix(`/`)"
+    networks:
+      - proxy2traefik
+
+  promtail:
+    image: grafana/promtail
+    container_name: promtail
+    env_file:
+      - .env
+    command: -config.file=/etc/promtail/promtail.yaml
+    volumes:
+      - "./promtail/promtail-config.yml:/etc/promtail/promtail.yaml"
+      - "./traefik/access-logs:/var/log"
+      - "./promtail/promtail-data:/tmp/positions"
+      - "./promtail/GeoLite2-City.mmdb:/etc/promtail/GeoLite2-City.mmdb"
+    networks:
+      - subnet_92_bridge
+
+  loki:
+    image: grafana/loki
+    container_name: loki
+    env_file:
+      - .env
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - subnet_92_bridge
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    env_file:
+      - .env
+    volumes:
+      - "./grafana/provisioning/:/etc/grafana/provisioning"
+      - 'grafana_data:/var/lib/grafana'
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy2traefik"      
+      - "traefik.http.routers.grafana.service=grafana"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.$DOMAIN`)"
+      - "traefik.http.routers.grafana.entrypoints=web"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        # Execute the default Grafana entrypoint script
+        /run.sh
+    networks:
+      - subnet_92_bridge
+      - proxy2traefik
+
+
+  catapp:
+    image: mikesir87/cats
+    container_name: my_catapp
+    env_file:
+      - .env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.catapp.rule=Host(`catapp.$DOMAIN`)"
+      - "traefik.http.routers.catapp.entrypoints=web"
+      - "traefik.http.routers.catapp.middlewares=test-errorpages"
+      - "traefik.http.services.catapp.loadbalancer.server.port=5000"
+      - "traefik.http.middlewares.test-errorpages.errors.status=400-599"
+      - "traefik.http.middlewares.test-errorpages.errors.service=error"
+      - "traefik.http.middlewares.test-errorpages.errors.query=/{status}.html"
+    networks:
+      - proxy2traefik
+
+  error:
+    image: guillaumebriday/traefik-custom-error-pages
+    container_name: errorpages
+    env_file:
+      - .env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.error.rule=Host(`error.$DOMAIN`)"
+      - "traefik.http.routers.error.service=error"
+      - "traefik.http.services.error.loadbalancer.server.port=80"
+      - "traefik.http.routers.error.entrypoints=web"
+    networks:
+      - proxy2traefik
+
+
+  portainer:
+    image: portainer/portainer-ce
+    container_name: portainer
+    env_file:
+      - .env
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - 'portainer_data:/data'
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.portainer.rule=Host(`portainer.$DOMAIN`)"
+      - "traefik.http.routers.portainer.service=portainer"
+      - "traefik.http.routers.portainer.entrypoints=web"
+      - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+    networks:
+      - proxy2traefik
+
+  postgresql:
+    image: docker.io/library/postgres:16-alpine
+    container_name: postgresql    
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
+      start_period: 20s
+      interval: 30s
+      retries: 5
+      timeout: 5s
+    volumes:
+      - database:/var/lib/postgresql/data
+    environment:
+      POSTGRES_PASSWORD: ${PG_PASS:?database password required}
+      POSTGRES_USER: ${PG_USER:-authentik}
+      POSTGRES_DB: ${PG_DB:-authentik}
+    env_file:
+      - .env
+    networks:
+      - subnet_88_bridge
+
+  redis:
+    image: docker.io/library/redis:alpine
+    container_name: redis
+    command: --save 60 1 --loglevel warning
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      start_period: 20s
+      interval: 30s
+      retries: 5
+      timeout: 3s
+    volumes:
+      - redis:/data
+    networks:
+      - subnet_88_bridge
+
+  auth_server:
+    container_name: authentik_server
+    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2025.2.0}
+    restart: unless-stopped
+    command: server
+    environment:
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_POSTGRESQL__HOST: postgresql
+      AUTHENTIK_POSTGRESQL__USER: ${PG_USER:-authentik}
+      AUTHENTIK_POSTGRESQL__NAME: ${PG_DB:-authentik}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS}
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./media:/media
+      - ./custom-templates:/templates
+    env_file:
+      - .env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.authentik-http.rule=Host(`auth.$DOMAIN`) || HostRegexp(`{subdomain:[a-z0-9]+}.${DOMAIN}`) && PathPrefix(`/outpost.goauthentik.io/`)"
+      - "traefik.http.routers.authentik-http.service=authentik-http-service"
+      - "traefik.http.routers.authentik-http.entrypoints=web"
+      - "traefik.http.services.authentik-http-service.loadbalancer.server.port=9000"
+      - "traefik.http.services.authentik-http-service.loadbalancer.healthcheck.path=/outpost.goauthentik.io/ping"
+      - "traefik.http.services.authentik-http-service.loadbalancer.healthcheck.port=9000"
+    networks:
+      - subnet_88_bridge
+      - proxy2traefik
+
+
+
+  auth_worker:
+    container_name: authentik_worker
+    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2025.2.0}
+    restart: unless-stopped
+    command: worker
+    environment:
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_POSTGRESQL__HOST: postgresql
+      AUTHENTIK_POSTGRESQL__USER: ${PG_USER:-authentik}
+      AUTHENTIK_POSTGRESQL__NAME: ${PG_DB:-authentik}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS}
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    user: root
+    volumes:
+      - /run/docker.sock:/run/docker.sock
+      - ./media:/media
+      - ./certs:/certs
+      - ./custom-templates:/templates
+    env_file:
+      - .env  
+    networks:
+      - subnet_88_bridge
+      - proxy2traefik
+
+
+
+volumes:
+    grafana_data: {}
+    portainer_data: {}
+    database: {}
+    redis: {}
+
+networks:
+# Traefik's MacVLAN bridge to the host network
+  traefik2host:
+    external: true
+# Traefik's Docker bridge to communicate with containers
+  proxy2traefik:
+    driver: bridge
+# Authentik's Isolated bridge for local based communication
+  subnet_88_bridge:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.driver.mtu: "1500"
+    ipam:
+      config:
+        - subnet: 192.168.88.0/24
+          gateway: 192.168.88.1
+      driver: default
+      options:
+        com.docker.network.bridge.name: "subnet_88_bridge"
+# Grafana and Loki's Isolated bridge
+  subnet_92_bridge:
+      driver: bridge
+      driver_opts:
+        com.docker.network.bridge.enable_ip_masquerade: "false" # Allows containers to access external networks
+        com.docker.network.bridge.enable_icc: "true"          # Enables inter-container communication
+        com.docker.network.driver.mtu: "1500"                # Sets the MTU (default is 1500)
+      ipam:
+        config:
+          - subnet: 192.168.92.0/24                            # Subnet for the custom bridge network
+            gateway: 192.168.92.1                              # Gateway for the network
+        driver: default
+        options:
+          com.docker.network.bridge.name: "subnet_92_bridge"     # Naming the bridge interface
+
+
