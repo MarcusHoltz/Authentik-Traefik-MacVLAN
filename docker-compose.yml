@@ -266,13 +266,15 @@ services:
       - subnet_88_bridge
       - proxy2traefik
 
-
-
 volumes:
-    grafana_data: {}
-    portainer_data: {}
-    database: {}
-    redis: {}
+  grafana_data:
+    name: grafana_data
+  portainer_data:
+    name: portainer_data
+  database:
+    name: database
+  redis:
+    name: redis
 
 networks:
 # Traefik's MacVLAN bridge to the host network
@@ -281,9 +283,11 @@ networks:
 # Traefik's Docker bridge to communicate with containers
   proxy2traefik:
     driver: bridge
+    name: proxy2traefik
 # Authentik's Isolated bridge for local based communication
   subnet_88_bridge:
     driver: bridge
+    name: subnet_88_bridge
     driver_opts:
       com.docker.network.bridge.enable_ip_masquerade: "false"
       com.docker.network.bridge.enable_icc: "true"
@@ -298,6 +302,7 @@ networks:
 # Grafana and Loki's Isolated bridge
   subnet_92_bridge:
       driver: bridge
+      name: subnet_92_bridge
       driver_opts:
         com.docker.network.bridge.enable_ip_masquerade: "false" # Allows containers to access external networks
         com.docker.network.bridge.enable_icc: "true"          # Enables inter-container communication
