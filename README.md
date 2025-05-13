@@ -23,9 +23,11 @@ For the full guide that goes along with this repo, visit https://blog.holtzweb.c
 
 * * *
 
-## Demo
+## Demo 
 
-<gif>
+![Docker MacVLAN Bridge with Traefik Demo of Script Running](https://raw.githubusercontent.com/MarcusHoltz/marcusholtz.github.io/refs/heads/main/assets/img/posts/traefik-macvlan-bridge--host-to-container-communication.gif)
+
+
 
 
 
