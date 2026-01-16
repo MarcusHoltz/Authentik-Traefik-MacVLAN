@@ -282,8 +282,7 @@ networks:
     external: true
 # Traefik's Docker bridge to communicate with containers
   proxy2traefik:
-    driver: bridge
-    name: proxy2traefik
+    external: true
 # Authentik's Isolated bridge for local based communication
   subnet_88_bridge:
     driver: bridge
