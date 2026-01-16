@@ -484,7 +484,11 @@ check_geolite_db() {
 #  [main] -- Run Docker Compose
 run_docker_compose() {
     echo "Environment setup complete... running Docker"
-    docker compose up -d || docker-compose up -d
+    if command -v docker &> /dev/null && docker compose version &> /dev/null 2>&1; then
+        docker compose up -d
+    else
+        docker-compose up -d
+    fi || true  
 }
 
 
