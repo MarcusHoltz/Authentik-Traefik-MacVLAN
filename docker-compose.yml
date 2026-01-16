@@ -229,6 +229,7 @@ services:
       - "traefik.http.routers.authentik-http.rule=Host(`auth.$DOMAIN`) || HostRegexp(`{subdomain:[a-z0-9]+}.${DOMAIN}`) && PathPrefix(`/outpost.goauthentik.io/`)"
       - "traefik.http.routers.authentik-http.service=authentik-http-service"
       - "traefik.http.routers.authentik-http.entrypoints=web"
+      - "traefik.docker.network=proxy2traefik"
       - "traefik.http.services.authentik-http-service.loadbalancer.server.port=9000"
       - "traefik.http.services.authentik-http-service.loadbalancer.healthcheck.path=/outpost.goauthentik.io/ping"
       - "traefik.http.services.authentik-http-service.loadbalancer.healthcheck.port=9000"
